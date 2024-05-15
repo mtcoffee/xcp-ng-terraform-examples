@@ -1,0 +1,27 @@
+xoa = "ws://xoa.domain.com:80"
+xoa_user = "admin@admin.net"
+#xoa_pass = "password"
+xoa_pool = "pool1"
+xoa_template = "Packer Template Windows Server 2022"
+xoa_storage = "vmStorageSR"
+xoa_net = "eth0"
+vm_name = "tfwinserver"
+vm_description = "testing win vm"
+vm_tags = ["Windows","Terraform"]
+vm_cpu_count = "2"
+vm_ram = "4294967296" #2GB x 1073741824 = 2147483648, 4x1073741824 = 4294967296
+vm_disk_size = "42949672960" #40GB x 1073741824 = 42949672960
+vm_user = "administrator"
+#vm_pass = "password"
+vm_ipaddress = "192.168.1.5"
+vm_netmask = "24"
+vm_ipgateway = "192.168.1.1"
+vm_dns_servers = ["192.168.1.1"]
+vm_dns_suffix = "domain.com"
+
+#domain join variables
+joindomain_username = "administrator"
+#joindomain_password = "password"
+ad_domain = "domain.com"
+ad_ou = "OU=SERVERS,DC=DOMAIN,DC=COM"
+administrators = "ADMIN-SERVER-ADMINS"

@@ -1,0 +1,27 @@
+#cloud-config
+hostname: ${hostname}
+fqdn: ${hostname}.${domain}
+package_upgrade: true
+manage_etc_hosts: true
+
+# Reboot after package install/update if necessary
+apt_reboot_if_required: true
+
+#grow lvm
+growpart:
+  mode: auto
+  devices: ['/dev/xvda3']
+  ignore_growroot_disabled: false
+runcmd:
+  - [ cloud-init-per, always, grow_VG, pvresize, /dev/xvda3 ]
+  - [ cloud-init-per, always, grow_LV, lvresize, -l, '+100%FREE', /dev/ubuntu-vg/ubuntu-lv ]
+  - [ cloud-init-per, always, grow_FS, resize2fs, /dev/ubuntu-vg/ubuntu-lv ]
+
+#uncomment to create an addtional user account
+#users:
+#  - name: privuser  #to create a password hash: mkpasswd --method=SHA-512
+#    passwd: "$6$SE7r5Ecfi1IwTGdm$/TyIQTZdtrydcQLY1TbMccpwRZlteOJ0TshTgErZP7U8Mw5Ko4wlGu0UEdAlhiV.HgbdsNLszwodR92Ycs4QL1"
+#    groups: [adm, cdrom, dip, plugdev, lxd, sudo]
+#    lock-passwd: false
+#    sudo: ALL=(ALL) NOPASSWD:ALL
+#    shell: /bin/bash

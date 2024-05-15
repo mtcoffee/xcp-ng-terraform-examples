@@ -1,0 +1,13 @@
+version: 2
+ethernets:
+    enX0:
+        dhcp4: false
+        dhcp6: false
+        addresses:
+          - ${ip}
+        routes:
+           - to: default
+             via: ${gw}
+        nameservers:
+          addresses: ${dns}
+          search: ${searchdomain}

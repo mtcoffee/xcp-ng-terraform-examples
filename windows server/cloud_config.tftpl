@@ -1,0 +1,72 @@
+cloudConfig: |
+Content-Type: multipart/mixed; boundary="==NewPart=="
+MIME-Version: 1.0
+
+--==NewPart==
+Content-Type: text/cloud-config; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="cloud-config"
+
+set_hostname: ${hostname}
+
+--==NewPart==
+Content-Type: text/x-shellscript; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="INIT.ps1"
+
+#set local admin pass
+$localUserPassword = ConvertTo-SecureString "${localadminpass}" -AsPlainText -Force
+$UserAccount = Get-LocalUser -Name "Administrator"
+$UserAccount | Set-LocalUser -Password $localUserPassword
+
+#find unformatted secondary disk(s) and initialize/format
+Resize-Partition -DriveLetter C -Size (Get-Partition -DriveLetter C | Get-PartitionSupportedSize).SizeMax
+Get-Disk | Where-Object PartitionStyle -Eq "RAW" | Initialize-Disk -PassThru | New-Partition -AssignDriveLetter -UseMaximumSize | Format-Volume
+
+#Enable Remote Desktop
+Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+Set-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\' -Name 'fDenyTSConnections' -Value 0
+Set-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\\' -Name 'UserAuthentication' -Value 1
+
+#suppress edge first run 
+New-Item 'HKLM:\Software\Policies\Microsoft\Edge' -Force | New-ItemProperty -Name HideFirstRunExperience -PropertyType DWORD -Value "0x1" -Force
+New-ItemProperty -Path HKLM:\Software\Microsoft\ServerManager -Name DoNotOpenServerManagerAtLogon -PropertyType DWORD -Value "0x1" -Force
+
+#join domain
+$domainJoinCreds = New-Object System.Management.Automation.PSCredential "${joindomain_user}@${domain}" ,(ConvertTo-SecureString -String "${joindomain_pass}" -AsPlainText -Force)
+Add-Computer -DomainName "${domain}" -Credential $domainJoinCreds -OUPath "${domain_ou}" -Restart:$false -Force
+Add-LocalGroupMember -Group Administrators -Member "${administrators}" #add AD group to local admin"
+
+#register new ip in dns
+Register-DnsClient
+
+#install chocolatey package manager and notepad++
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+choco install -y notepadplusplus
+choco install -y vscode
+choco install -y powershell-core
+
+#install Server Core App Compatibility Feature if applicable
+$IsServerCore = (Get-ItemPropertyValue -Path "HKLM:\Software\Microsoft\Windows NT\CurrentVersion" -Name "InstallationType") -eq "Server Core"
+if ($IsServerCore) {Add-WindowsCapability -Online -Name ServerCore.AppCompatibility~~~~0.0.1.0}
+
+
+#configure network
+$adapter = Get-NetAdapter | ? { $_.Name -like "Ethernet*" }
+$adapter | Remove-NetIpAddress -Confirm:$false
+$adapter | Remove-NetRoute -Confirm:$false
+$adapter | New-NetIpAddress -IPAddress ${ip} -PrefixLength ${netmask} -DefaultGateway ${gw}
+$adapter | Set-DnsClientServerAddress -ServerAddresses(${dns})
+$adapter | Disable-NetAdapterBinding -ComponentID ms_tcpip6
+
+ 
+#cleanup log files that may contain sensitive data and set cloud-init drive to offline
+Clear-Content "C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log"
+$DriveLetter = Get-Volume -FileSystemLabel 'CONFIG-2' | Select-Object -ExpandProperty DriveLetter
+Remove-Item -Path ($DriveLetter + ":\user-data") -Confirm:$false 
+Get-Disk | Where-Object { (Get-Partition -DiskNumber $_.Number | Get-Volume).FileSystemLabel -eq 'CONFIG-2' } | set-disk -IsOffline $true
+
+#disable cloudbase-init
+Set-Service -Name cloudbase-init -StartupType Disabled
